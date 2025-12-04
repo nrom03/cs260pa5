@@ -1,0 +1,4 @@
+#k
+3
+#initial state
+1 0 3 4 2 6 7 5 8 
