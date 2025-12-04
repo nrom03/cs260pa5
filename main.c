@@ -4,7 +4,36 @@
 #include <string.h>
 #include <limits.h>
 
+typedef struct queue queue;
+typedef struct queueNode queueNode; // might be unnecessary to implement the queue as a linked list
+typedef struct hashTable hashTable;
+typedef struct hashNode hashNode;
+typedef struct graphNode graphNode;
 typedef struct board board;
+
+struct hashNode
+{
+	board* board;
+	hashNode* next;
+};
+
+struct hashTable
+{
+	hashNode* hashTable;
+};
+
+struct queueNode
+{
+	board* board;
+};
+
+struct queue
+{
+	queueNode* head;
+	queueNode* tail;
+	int size;
+};
+
 struct board
 {
 	int k; // width/height of board
@@ -12,6 +41,7 @@ struct board
 	int emptyTileIdx;
 	int* tiles; // one dimensional representation of the board's tiles
 
+	board* parent; // useful for building back the array of moves
 	bool (*isPossibleFunction)(board* this);
 	void (*memberDataCleanup)(board* this);
 
@@ -26,6 +56,16 @@ struct board
 
 	// check if position is valid
 	bool (*isValidPosition)(board* this, int r, int c);
+
+	// function to generate neighboring nodes and assign their pointers back to current
+	void (*generateNeighbors)(board* this);
+
+	// reference back to the hashTable
+	hashTable* mainHashTable;
+
+	// reference back to the queue
+	queue* mainQueue;
+
 };
 
 // setter for row column positions given the value in the array
@@ -131,20 +171,100 @@ void clearTiles(board* this)
 	}
 }
 
+void swap(int* arr, int from, int to)
+{
+	int temp = arr[from];
+	arr[from] = arr[to];
+	arr[to] = temp;
+}
+
+// this is my fault for creating a circular dependency
+board* generateNewBoard(board* orig);
+
+// neighbor generation function
+void generateNeighbors(board* this)
+{
+	// for the current board, we want to know the up, down, left, and right nodes relative to the empty node
+	// max number of neighbors = 4
+	int emptyRowIdx;
+	int emptyColIdx;
+	int newEmptyRowIdx;
+	int newEmptyColIdx;
+
+	bool validNeighbor;
+	board* newBoard = NULL;
+
+	for(int ii = 0; ii < 4; ii++)
+	{
+		// reassign function at runtime
+		switch(ii)
+		{
+		case 0:
+			this->neighborPosition = up;
+			break;
+		case 1:
+			this->neighborPosition = down;
+			break;
+		case 2:
+			this->neighborPosition = left;
+			break;
+		case 3:
+			this->neighborPosition = right;
+			break;
+		}
+		this->idx2RowCol(this, this->emptyTileIdx, &emptyRowIdx, &emptyColIdx);
+		validNeighbor = this->neighborPosition(this, emptyRowIdx, emptyColIdx, &newEmptyRowIdx, &newEmptyColIdx);
+		if(validNeighbor)
+		{
+			newBoard = generateNewBoard(this);
+
+			// now want to swap the empty position with the new one
+			swap(newBoard->tiles, newBoard->rowCol2Idx(this, emptyRowIdx, emptyColIdx), newBoard->rowCol2Idx(this, newEmptyRowIdx, newEmptyColIdx));
+
+			// this might be a good spot to check if it already exists in the hashmap
+			// if it does exist in the hasmap, add it to the linked list (open hash map)
+			// if it does not exist, add it to the hash map and enqueue it
+		}
+	}
+}
+
 // board initializer
 board* initBoard(int k)
 {
-	board* boardOut = malloc(sizeof(board));
+	board* boardOut = malloc(sizeof(board)); // needs a free later
 	boardOut->k = k;
 	boardOut->k2 = k*k;
-	boardOut->tiles = malloc(sizeof(int) * (boardOut->k2));
+	boardOut->tiles = malloc(sizeof(int) * (boardOut->k2)); // needs a free later
 	boardOut->isPossibleFunction = isSolvable;
 	boardOut->memberDataCleanup = clearTiles;
 	boardOut->rowCol2Idx = getIdx;
 	boardOut->idx2RowCol = setRowColIdx;
 	boardOut->neighborPosition = NULL;
 	boardOut->isValidPosition = isValidPosition;
+	boardOut->generateNeighbors = generateNeighbors;
+	boardOut->parent = NULL;
 	return(boardOut);
+}
+
+// this function should take in the existing board, clone it, reassign
+board* generateNewBoard(board* orig)
+{
+	board* newBoard = initBoard(orig->k);
+	memcpy(newBoard->tiles, orig->tiles, sizeof(orig->tiles[0]) * orig->k2);
+	newBoard->parent = orig;
+	newBoard->mainQueue = orig->mainQueue;
+	newBoard->mainHashTable = orig->mainHashTable;
+	return(newBoard);
+}
+
+// this needs to be revisited
+queue* initializeQueue(board* first)
+{
+	queue* queueOut = malloc(sizeof(queue));
+	queueOut->head->board = first;
+	queueOut->tail->board = first;
+	queueOut->size = 1;
+	return(queueOut);
 }
 
 int main(int argc, char **argv)
@@ -183,8 +303,14 @@ int main(int argc, char **argv)
 	int k2 = k * k;
 	int move[k2];
 
+	// initialize hashtable and queue structures
+	hashTable* table = NULL;
+	queue* q = NULL;
+
 	// initialize the board structure;
 	board* gameBoard = initBoard(k);
+	gameBoard->mainHashTable = table;
+	gameBoard->mainQueue = q;
 	gameBoard->emptyTileIdx = k2;
 
 	for(int ii = 0; ii < k*k; ii++)
@@ -206,19 +332,10 @@ int main(int argc, char **argv)
 	//printBoard(initial_board, k); //Assuming that I have a function to print the board, print it here to make sure I read the input board properly for DEBUG purposes
 	fclose(fp_in);
 
-	// 0 is the empty square
-
-	////////////////////
-	// do the rest to solve the puzzle
-	////////////////////
-	
-	//if it is solvable, then use something as follows:
-
-	fprintf(fp_out, "#moves\n");
-
-	//probably within a loop, or however you stored proper moves, print them one by one by leaving a space between moves, as below
 	if(gameBoard->isPossibleFunction(gameBoard))
 	{
+		//probably within a loop, or however you stored proper moves, print them one by one by leaving a space between moves, as below
+		fprintf(fp_out, "#moves\n");
 		for(int i=0;i<numberOfMoves;i++)
 		{
 			fprintf(fp_out, "%d ", move[i]);
@@ -232,6 +349,10 @@ int main(int argc, char **argv)
 	}
 	fclose(fp_out);
 
+	// final cleanup
+	gameBoard->memberDataCleanup(gameBoard);
+	free(gameBoard);
+	free(line);
 	return 0;
 
 }
