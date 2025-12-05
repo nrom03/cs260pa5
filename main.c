@@ -4,7 +4,7 @@
 #include <string.h>
 #include <limits.h>
 
-#define DEFAULT_QUEUE_SIZE 100000
+#define DEFAULT_QUEUE_SIZE 200000
 #define DEBUG 1337
 
 // eclipse didn't want to cooperate...
@@ -452,6 +452,10 @@ void printBoard(board* this)
 bool checkBoard(board* currentBoard)
 {
 	int first = currentBoard->tiles[0];
+	if(first == 0)
+	{
+		return(false);
+	}
 	for(int ii = 1; ii < currentBoard->k2; ii++)
 	{
 		if(first > currentBoard->tiles[ii])
@@ -487,14 +491,13 @@ int main(int argc, char **argv)
 	char* line = NULL;
 	size_t lineBuffSize = 0;
 	int k;
-	int numberOfMoves = INT_MAX; // something to keep track of when number of moves was never set due to not finding a solution
+	//int numberOfMoves = INT_MAX; // something to keep track of when number of moves was never set due to not finding a solution
 
 	getline(&line, &lineBuffSize, fp_in); //ignore the first line in file, which is a comment
 	fscanf(fp_in, "%d\n", &k); //read size of the board
 	getline(&line, &lineBuffSize, fp_in); //ignore the second line in file, which is a comment
 
 	int k2 = k * k;
-	int move[k2];
 
 	// initialize the board structure;
 	board* gameBoard = initBoard(k);
@@ -509,7 +512,6 @@ int main(int argc, char **argv)
 		{
 			gameBoard->emptyTileIdx = ii;
 		}
-		move[ii] = -1;
 	}
 
 	if(gameBoard->emptyTileIdx == k2)
@@ -649,14 +651,33 @@ int main(int argc, char **argv)
 		printBoard(solvedBoard);
 #endif//DEBUG
 
-		while(numMoves > 0 && parentOfSolution != NULL)
+		while(numMoves > 0 && parentOfSolution != NULL && parentOfSolution->move != -1)
 		{
 			++numMoves;
+			parentOfSolution = parentOfSolution->parent;
 		}
 
+		int move[numMoves];
+		int idx = 0;
+
+		move[idx] = solvedBoard->move;
+		parentOfSolution = solvedBoard->parent;
+		++idx;
+
+		// repeat loop again to populate the rest of the mvoes array
+		while(numMoves > 0 && parentOfSolution != NULL && parentOfSolution->move != -1)
+		{
+			//++numMoves;
+			//parentOfSolution = parentOfSolution->parent;
+			move[idx] = parentOfSolution->move;
+			parentOfSolution = parentOfSolution->parent;
+			++idx;
+		}
+
+		// moves are put in backwards, so print in reverse order
 		//probably within a loop, or however you stored proper moves, print them one by one by leaving a space between moves, as below
 		fprintf(fp_out, "#moves\n");
-		for(int i=0;i<numberOfMoves;i++)
+		for(int i=idx-1; i >= 0; i--)
 		{
 			fprintf(fp_out, "%d ", move[i]);
 		}
