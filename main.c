@@ -5,6 +5,7 @@
 #include <limits.h>
 
 #define DEFAULT_QUEUE_SIZE 100000
+#define DEBUG 1337
 
 // eclipse didn't want to cooperate...
 /*#define bool _Bool
@@ -218,71 +219,12 @@ board* generateNeighbor(board* orig, hashTable* table, int emptyIdxRow, int empt
 	}
 	else
 	{
-		board* newBoard = generateNewBoard(orig);
-		memcpy(newBoard->tiles, temporaryBoard, sizeof(temporaryBoard[0] * orig->k2));
+		newBoard = generateNewBoard(orig);
+		newBoard->emptyTileIdx = newEmptySpaceIdx;
+		memcpy(newBoard->tiles, temporaryBoard, sizeof(temporaryBoard[0]) * orig->k2);
 	}
 	return(newBoard);
 }
-
-// neighbor generation function
-/*void generateNeighbors(board* this)
-{
-	// for the current board, we want to know the up, down, left, and right nodes relative to the empty node
-	// max number of neighbors = 4
-	int emptyRowIdx;
-	int emptyColIdx;
-	int newEmptyRowIdx;
-	int newEmptyColIdx;
-
-	bool validNeighbor;
-	board* newBoard = NULL;
-
-	for(int ii = 0; ii < 4; ii++)
-	{
-		this->idx2RowCol(this, this->emptyTileIdx, &emptyRowIdx, &emptyColIdx);
-
-		// reassign function at runtime
-		switch(ii)
-		{
-			case 0:
-				this->neighborPosition = up;
-				break;
-			case 1:
-				this->neighborPosition = down;
-				break;
-			case 2:
-				this->neighborPosition = left;
-				break;
-			case 3:
-				this->neighborPosition = right;
-				break;
-		}
-
-		validNeighbor = this->neighborPosition(this, emptyRowIdx, emptyColIdx, &newEmptyRowIdx, &newEmptyColIdx);
-		if(validNeighbor)
-		{
-			newBoard = generateNewBoard(this);
-
-			// now want to swap the empty position with the new one
-			swap(newBoard->tiles, newBoard->rowCol2Idx(this, emptyRowIdx, emptyColIdx), newBoard->rowCol2Idx(this, newEmptyRowIdx, newEmptyColIdx));
-
-			// this might be a good spot to check if it already exists in the hashmap
-			// if it does exist in the hasmap, add it to the linked list (open hash map)
-			// if it does not exist, add it to the hash map and enqueue it
-		}
-	}
-}*/
-
-/*int hashValue(hashTable* this, board* b)
-{
-	int key = 0;
-	for(int ii = 0; ii < b->k2; ii++)
-	{
-		key += (ii*b->tiles[ii]);
-	}
-	key -= this->capacity;
-	return(key);
-}*/
 
 //int hashValue(hashTable* this, board* b)
 int hashValue(hashTable* this, int* tiles)
@@ -388,10 +330,11 @@ board* generateNewBoard(board* orig)
 
 void enqueue(queue* this, board* board_in)
 {
-	if(board_in == NULL)
+	/*resolved this issue but it might come back if I get too wild with it
+	 * if(board_in == NULL)
 	{
 		return;
-	}
+	}*/
 
 	this->seenBoards[this->tail] = board_in;
 	this->tail++;
@@ -493,6 +436,33 @@ hashTable* initializeHashTable(board* first)
 	return(tableOut);
 }*/
 
+void printBoard(board* this)
+{
+    for (int ii = 0; ii < this->k; ii++)
+    {
+        for (int jj = 0; jj < this->k; jj++)
+        {
+            printf("%d ", this->tiles[ii*this->k + jj]);
+        }
+        printf("\n");
+    }
+}
+
+// function to check if the board has been solved
+bool checkBoard(board* currentBoard)
+{
+	int first = currentBoard->tiles[0];
+	for(int ii = 1; ii < currentBoard->k2; ii++)
+	{
+		if(first > currentBoard->tiles[ii])
+		{
+			return(false);
+		}
+		first = currentBoard->tiles[ii];
+	}
+	return(true);
+}
+
 int main(int argc, char **argv)
 {
 	FILE* fp_in;
@@ -548,6 +518,20 @@ int main(int argc, char **argv)
 		return(-1);
 	}
 
+#ifdef  DEBUG
+			printf("Checking board:\n");
+			printBoard(gameBoard);
+			bool status = checkBoard(gameBoard);
+			if(status == true)
+			{
+				printf("Board has been solved!\n");
+			}
+			else
+			{
+				printf("Board has not yet been solved.\n");
+			}
+#endif//DEBUG
+
 	// initialize hashtable and queue structures
 	// inserts to hashTable by default
 	hashTable* table = initializeHashTable(gameBoard);
@@ -555,11 +539,14 @@ int main(int argc, char **argv)
 
 	//printBoard(initial_board, k); //Assuming that I have a function to print the board, print it here to make sure I read the input board properly for DEBUG purposes
 	fclose(fp_in);
+	bool foundSolution = false;
+	board* neighborBoard;
 
 	if(gameBoard->isPossibleFunction(gameBoard))
 	{
 		// BFS approach to find the solution
-		while (q->head < q->tail)
+		// exit controlled might be easier so it can just exit when it finds it - update, probably not
+		while ((q->head < q->tail) && !foundSolution)
 		{
 			int neighborNewRow;
 			int neighborNewCol;
@@ -567,12 +554,12 @@ int main(int argc, char **argv)
 			int emptySpaceCol;
 
 			board* currentBoard = q->seenBoards[q->head];
-			board* neighborBoard;
 
 			currentBoard->idx2RowCol(currentBoard, currentBoard->emptyTileIdx, &emptySpaceRow, &emptySpaceCol);
+			q->head++;
+
 			/*int* tempBoard = malloc(sizeof(currentBoard->tiles[0]) * currentBoard->k2);
 			memcpy(tempBoard, currentBoard->tiles, sizeof(currentBoard->tiles[0]) * currentBoard->k2);*/
-			q->head++;
 
 			// definitely an opportunity here to put these into a function
 			// check if there are any valid neighbors UP from current empty
@@ -580,40 +567,92 @@ int main(int argc, char **argv)
 			if(currentBoard->neighborPosition(currentBoard, emptySpaceRow, emptySpaceCol, &neighborNewRow, &neighborNewCol))
 			{
 				neighborBoard = generateNeighbor(currentBoard, table, emptySpaceRow, emptySpaceCol, neighborNewRow, neighborNewCol);
-				currentBoard->up = neighborBoard;
-				q->enqueue(neighborBoard);
+				if(neighborBoard != NULL)
+				{
+					currentBoard->up = neighborBoard;
+					q->enqueue(q, neighborBoard);
+					table->insert(table, neighborBoard);
+					foundSolution = checkBoard(neighborBoard);
+#ifdef DEBUG
+					printf("UP board:\n");
+					printBoard(neighborBoard);
+#endif//DEBUG
+				}
 			}
 
 			// check if there are any valid neighbors DOWN from current empty
 			currentBoard->neighborPosition = down;
-			if(currentBoard->neighborPosition(currentBoard, emptySpaceRow, emptySpaceCol, &neighborNewRow, &neighborNewCol))
+			if(!foundSolution && currentBoard->neighborPosition(currentBoard, emptySpaceRow, emptySpaceCol, &neighborNewRow, &neighborNewCol))
 			{
 				neighborBoard = generateNeighbor(currentBoard, table, emptySpaceRow, emptySpaceCol, neighborNewRow, neighborNewCol);
-				currentBoard->down = neighborBoard;
-				q->enqueue(neighborBoard);
+				if(neighborBoard != NULL)
+				{
+					currentBoard->down = neighborBoard;
+					q->enqueue(q, neighborBoard);
+					table->insert(table, neighborBoard);
+					foundSolution = checkBoard(neighborBoard);
+#ifdef DEBUG
+					printf("DOWN board:\n");
+					printBoard(neighborBoard);
+#endif//DEBUG
+				}
 			}
 
 			// check if there are any valid neighbors LEFT from current empty
 			currentBoard->neighborPosition = left;
-			if(currentBoard->neighborPosition(currentBoard, emptySpaceRow, emptySpaceCol, &neighborNewRow, &neighborNewCol))
+			if(!foundSolution && currentBoard->neighborPosition(currentBoard, emptySpaceRow, emptySpaceCol, &neighborNewRow, &neighborNewCol))
 			{
 				neighborBoard = generateNeighbor(currentBoard, table, emptySpaceRow, emptySpaceCol, neighborNewRow, neighborNewCol);
-				currentBoard->left = neighborBoard;
-				q->enqueue(neighborBoard);
+				if(neighborBoard != NULL)
+				{
+					currentBoard->left = neighborBoard;
+					q->enqueue(q, neighborBoard);
+					table->insert(table, neighborBoard);
+					foundSolution = checkBoard(neighborBoard);
+#ifdef DEBUG
+					printf("LEFT board:\n");
+					printBoard(neighborBoard);
+#endif//DEBUG
+				}
 			}
 
 			// check if there are any valid neighbors RIGHT from current empty
 			currentBoard->neighborPosition = right;
-			if(currentBoard->neighborPosition(currentBoard, emptySpaceRow, emptySpaceCol, &neighborNewRow, &neighborNewCol))
+			if(!foundSolution && currentBoard->neighborPosition(currentBoard, emptySpaceRow, emptySpaceCol, &neighborNewRow, &neighborNewCol))
 			{
 				neighborBoard = generateNeighbor(currentBoard, table, emptySpaceRow, emptySpaceCol, neighborNewRow, neighborNewCol);
-				currentBoard->right = neighborBoard;
-				q->enqueue(neighborBoard);
+				if(neighborBoard != NULL)
+				{
+					currentBoard->right = neighborBoard;
+					q->enqueue(q, neighborBoard);
+					table->insert(table, neighborBoard);
+					foundSolution = checkBoard(neighborBoard);
+#ifdef DEBUG
+					printf("RIGHT board:\n");
+					printBoard(neighborBoard);
+#endif//DEBUG
+				}
 			}
 		}
+		//while ((q->head < q->tail) && !foundSolution);
 
 		// now want to traverse through the parents from the final node back to the parent
 		// to build up the path of moves needed to solve the puzzle
+
+		// neighborBoard should be our solution baord
+		board* solvedBoard = q->seenBoards[q->tail - 1];
+		board* parentOfSolution = solvedBoard->parent;
+		int numMoves = parentOfSolution == NULL ? 0 : 1;
+
+#ifdef  DEBUG
+		printf("Solution:\n");
+		printBoard(solvedBoard);
+#endif//DEBUG
+
+		while(numMoves > 0 && parentOfSolution != NULL)
+		{
+			++numMoves;
+		}
 
 		//probably within a loop, or however you stored proper moves, print them one by one by leaving a space between moves, as below
 		fprintf(fp_out, "#moves\n");
