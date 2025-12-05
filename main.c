@@ -5,9 +5,9 @@
 #include <limits.h>
 
 #define DEFAULT_QUEUE_SIZE 200000
-#define DEBUG 1337
+//#define DEBUG 1337
 
-// eclipse didn't want to cooperate...
+// eclipse didn't want to cooperate on one computer...
 /*#define bool _Bool
 #define false 0
 #define true 1*/
@@ -222,6 +222,7 @@ board* generateNeighbor(board* orig, hashTable* table, int emptyIdxRow, int empt
 		newBoard = generateNewBoard(orig);
 		newBoard->emptyTileIdx = newEmptySpaceIdx;
 		memcpy(newBoard->tiles, temporaryBoard, sizeof(temporaryBoard[0]) * orig->k2);
+		newBoard->move = newBoard->tiles[emptySpaceIdx]; // use the OLD empty space idx to determine the move
 	}
 	return(newBoard);
 }
@@ -449,7 +450,9 @@ void printBoard(board* this)
 }
 
 // function to check if the board has been solved
-bool checkBoard(board* currentBoard)
+// this stupid thing led me down quite the debugging adventure
+// rip bozo (2025-2025), memorializing you here for how much time you wasted
+/*bool checkBoard(board* currentBoard)
 {
 	int first = currentBoard->tiles[0];
 	if(first == 0)
@@ -463,6 +466,25 @@ bool checkBoard(board* currentBoard)
 			return(false);
 		}
 		first = currentBoard->tiles[ii];
+	}
+	return(true);
+}*/
+
+// new and improved solution checker because other one was messing up
+bool checkBoard(board* currentBoard)
+{
+	int first = currentBoard->tiles[0];
+	if(first == 0)
+	{
+		return(false);
+	}
+
+	for(int ii = 0; ii < currentBoard->k2 - 1; ii++)
+	{
+		if(currentBoard->tiles[ii] != ii + 1)
+		{
+			return(false);
+		}
 	}
 	return(true);
 }
@@ -543,10 +565,10 @@ int main(int argc, char **argv)
 	fclose(fp_in);
 	bool foundSolution = false;
 	board* neighborBoard;
-
+	int boardCounter = 0;
 	if(gameBoard->isPossibleFunction(gameBoard))
 	{
-		// BFS approach to find the solution
+		// BFS approach to find the solution - grow the graph as it goes
 		// exit controlled might be easier so it can just exit when it finds it - update, probably not
 		while ((q->head < q->tail) && !foundSolution)
 		{
@@ -554,12 +576,28 @@ int main(int argc, char **argv)
 			int neighborNewCol;
 			int emptySpaceRow;
 			int emptySpaceCol;
-
+			boardCounter++;
 			board* currentBoard = q->seenBoards[q->head];
 
 			currentBoard->idx2RowCol(currentBoard, currentBoard->emptyTileIdx, &emptySpaceRow, &emptySpaceCol);
 			q->head++;
 
+#ifdef  DEBUG
+			printf("**** CURRENT BOARD ****:\n");
+			printf("#%d\n", boardCounter);
+			printBoard(currentBoard);
+
+			printf("Checking board:\n");
+			bool status = checkBoard(currentBoard);
+			if(status == true)
+			{
+				printf("Board has been solved!\n");
+			}
+			else
+			{
+				printf("Board has not yet been solved.\n");
+			}
+#endif//DEBUG
 			/*int* tempBoard = malloc(sizeof(currentBoard->tiles[0]) * currentBoard->k2);
 			memcpy(tempBoard, currentBoard->tiles, sizeof(currentBoard->tiles[0]) * currentBoard->k2);*/
 
@@ -568,6 +606,7 @@ int main(int argc, char **argv)
 			currentBoard->neighborPosition = up;
 			if(currentBoard->neighborPosition(currentBoard, emptySpaceRow, emptySpaceCol, &neighborNewRow, &neighborNewCol))
 			{
+				// if there is no need to generate a new neighbor, to add to the map, just don't do it
 				neighborBoard = generateNeighbor(currentBoard, table, emptySpaceRow, emptySpaceCol, neighborNewRow, neighborNewCol);
 				if(neighborBoard != NULL)
 				{
@@ -586,6 +625,7 @@ int main(int argc, char **argv)
 			currentBoard->neighborPosition = down;
 			if(!foundSolution && currentBoard->neighborPosition(currentBoard, emptySpaceRow, emptySpaceCol, &neighborNewRow, &neighborNewCol))
 			{
+				// if there is no need to generate a new neighbor, to add to the map, just don't do it
 				neighborBoard = generateNeighbor(currentBoard, table, emptySpaceRow, emptySpaceCol, neighborNewRow, neighborNewCol);
 				if(neighborBoard != NULL)
 				{
@@ -604,6 +644,7 @@ int main(int argc, char **argv)
 			currentBoard->neighborPosition = left;
 			if(!foundSolution && currentBoard->neighborPosition(currentBoard, emptySpaceRow, emptySpaceCol, &neighborNewRow, &neighborNewCol))
 			{
+				// if there is no need to generate a new neighbor, to add to the map, just don't do it
 				neighborBoard = generateNeighbor(currentBoard, table, emptySpaceRow, emptySpaceCol, neighborNewRow, neighborNewCol);
 				if(neighborBoard != NULL)
 				{
@@ -622,6 +663,7 @@ int main(int argc, char **argv)
 			currentBoard->neighborPosition = right;
 			if(!foundSolution && currentBoard->neighborPosition(currentBoard, emptySpaceRow, emptySpaceCol, &neighborNewRow, &neighborNewCol))
 			{
+				// if there is no need to generate a new neighbor, to add to the map, just don't do it
 				neighborBoard = generateNeighbor(currentBoard, table, emptySpaceRow, emptySpaceCol, neighborNewRow, neighborNewCol);
 				if(neighborBoard != NULL)
 				{
@@ -681,6 +723,7 @@ int main(int argc, char **argv)
 		{
 			fprintf(fp_out, "%d ", move[i]);
 		}
+		fprintf(fp_out, "\n");
 	}
 	else
 	{
